@@ -25,6 +25,7 @@ import matplotlib.colors as mcolors
 import matplotlib.patheffects as pe
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch
 from mpl_toolkits.mplot3d.art3d import Line3DCollection, Poly3DCollection
 from mpl_toolkits.mplot3d.proj3d import proj_transform
@@ -33,6 +34,8 @@ OUT = os.path.dirname(os.path.abspath(__file__))
 PALETTE = ["#4C78A8", "#F58518", "#54A24B", "#B279A2", "#E45756"]
 INK = "#1b1f23"
 GREY = "#7b8794"
+RED = "#D62728"          # the reference point
+DROP = "#9aa5b1"         # projection lines
 PAREN = True
 
 plt.rcParams.update({"mathtext.fontset": "cm", "font.family": "DejaVu Sans",
@@ -107,7 +110,7 @@ def fig_2d():
             ax.text(a[0], a[1] - 0.05, name(i + 1), ha="center", va="top", color=INK)
         else:
             ax.text(a[0] - 0.035, a[1] - 0.04, name(i + 1), ha="right", va="top", color=INK)
-    ax.plot(r[0], r[1], "s", ms=8.5, mfc="white", mec=INK, mew=1.5, zorder=4)
+    ax.plot(r[0], r[1], "s", ms=8.5, mfc=RED, mec=INK, mew=1.0, zorder=4)
     ax.text(r[0] + 0.035, r[1] + 0.015, r"$r$", ha="left", va="bottom", color=INK)
     ax.text(0.73, 0.83, r"$\mathrm{HV}(A;r)$", ha="center", va="center", color=INK, zorder=4)
 
@@ -124,6 +127,22 @@ def fig_2d():
     save(fig, "hypervolume-indicator-2d")
 
 
+def staircase(P2, r2):
+    """Boundary polygon of the union of the rectangles [p, r2], p in P2 (2-D)."""
+    keep, best = [], np.inf
+    for p in P2[np.argsort(P2[:, 0])]:
+        if p[1] < best - 1e-12:                     # only non-dominated points matter
+            keep.append(p)
+            best = p[1]
+    Q = np.array(keep)
+    xs = np.append(Q[:, 0], r2[0])
+    px, py = [Q[0, 0]], [r2[1]]
+    for i, p in enumerate(Q):
+        px += [p[0], xs[i + 1]]
+        py += [p[1], p[1]]
+    return np.array(px + [r2[0]]), np.array(py + [r2[1]])
+
+
 # ----------------------------------------------------------------------- 3-D
 class Arrow3D(FancyArrowPatch):
     def __init__(self, xs, ys, zs, **kw):
@@ -137,7 +156,7 @@ class Arrow3D(FancyArrowPatch):
 
 
 def fig_3d():
-    A = np.array([[0.15, 0.55, 0.78], [0.45, 0.20, 0.60], [0.66, 0.72, 0.26],
+    A = np.array([[0.15, 0.55, 0.78], [0.52, 0.20, 0.55], [0.66, 0.72, 0.26],
                   [0.30, 0.86, 0.45]])
     r = np.array([1.0, 1.0, 1.0])
     elev, azim = -20.0, -128.0
@@ -223,24 +242,45 @@ def fig_3d():
     fig = plt.figure(figsize=(7.6, 5.9))
     ax = fig.add_subplot(111, projection="3d", computed_zorder=False)
     ax.set_proj_type("ortho")
+
+    # projections of the points and of the dominated region onto the coordinate planes
+    # f1-f2 (at f3 = 0) and f2-f3 (at f1 = 0): the same construction one dimension lower,
+    # which makes the dominance relations easy to check
+    dark = [shade(c, 0.55) for c in PALETTE]
+    fill, edge = "#edf0f3", "#b7c0c9"      # neutral, so that no box colour is echoed
+    for cols2, r2, lift in ((( 0, 1), (r[0], r[1]), lambda u, v: (u, v, 0.0)),
+                            (( 1, 2), (r[1], r[2]), lambda u, v: (0.0, u, v))):
+        px, py = staircase(A[:, cols2], r2)
+        poly = [lift(u, v) for u, v in zip(px, py)]
+        ax.add_collection3d(Poly3DCollection([poly], facecolors=[fill], edgecolors="none",
+                                             zorder=0))
+        ring = [[poly[k], poly[(k + 1) % len(poly)]] for k in range(len(poly))]
+        ax.add_collection3d(Line3DCollection(ring, colors=edge, linewidths=1.0,
+                                             linestyles=(0, (4, 3)), zorder=0.4))
+        for q, a in enumerate(A):
+            f = lift(a[cols2[0]], a[cols2[1]])
+            ax.plot([f[0]], [f[1]], [f[2]], "o", ms=5.5, mfc=dark[q], mec="none",
+                    zorder=0.6)
+            ax.plot([a[0], f[0]], [a[1], f[1]], [a[2], f[2]], ls=(0, (4, 3)), lw=0.9,
+                    color=DROP, zorder=3.6)   # in front: the planes are nearer than the solid
+
     ax.add_collection3d(Poly3DCollection(polys, facecolors=cols, edgecolors=cols,
                                          linewidths=0.4, zorder=1))
     ax.add_collection3d(Line3DCollection(segs, colors=INK, linewidths=1.0, zorder=2))
-    ax.add_collection3d(Line3DCollection(hidden, colors=GREY, linewidths=0.9, zorder=3,
-                                         linestyles=(0, (4, 4))))
+    ax.add_collection3d(Line3DCollection(hidden, colors=shade(RED, 1.55), linewidths=1.0,
+                                         zorder=3, linestyles=(0, (4, 4))))
     for q, a in enumerate(A):
-        ax.plot([a[0]], [a[1]], [a[2]], "o", ms=8.5, mfc=INK, mec="white", mew=1.0, zorder=4)
-    offs = [(0.05, 0.26, -0.02, "center"), (0.00, -0.03, -0.09, "top"),
-            (0.02, 0.10, -0.09, "top"), (-0.02, 0.00, -0.09, "top")]
-    plate = dict(facecolor="white", edgecolor="none", alpha=0.85, pad=1.2)
-    for q, (a, (dx, dy, dz, va)) in enumerate(zip(A, offs)):
-        ax.text(a[0] + dx, a[1] + dy, a[2] + dz, name(q + 1), ha="center", va=va,
-                color=INK, zorder=5, bbox=plate)
-    ax.plot([r[0]], [r[1]], [r[2]], "s", ms=8.5, mfc="white", mec=INK, mew=1.5, zorder=4)
-    ax.text(r[0] + 0.02, r[1] - 0.06, r[2] + 0.05, r"$r$", ha="left", va="bottom", color=INK,
-            zorder=5, bbox=plate)
+        ax.plot([a[0]], [a[1]], [a[2]], "o", ms=9, mfc=dark[q], mec="white", mew=1.0,
+                zorder=4)
+    ax.plot([r[0]], [r[1]], [r[2]], "s", ms=9, mfc=RED, mec="white", mew=1.0, zorder=4)
     ax.text(0.35, 0.35, 1.20, r"$\mathrm{HV}(A;r)$", ha="center", va="center", color=INK,
             zorder=5)
+    handles = [Line2D([], [], ls="none", marker="o", ms=8, mfc=dark[q], mec="white",
+                      mew=0.8, label=name(q + 1)) for q in range(len(A))]
+    handles.append(Line2D([], [], ls="none", marker="s", ms=8, mfc=RED, mec="white",
+                          mew=0.8, label=r"$r$"))
+    ax.legend(handles=handles, loc="upper left", frameon=False, labelspacing=0.55,
+              handletextpad=0.3, borderpad=0.2, fontsize=15)
 
     # axis triad, drawn in the same 3-D axes: same projection matrix as the boxes
     o, arm = np.array([0.02, 1.52, 0.10]), 0.36

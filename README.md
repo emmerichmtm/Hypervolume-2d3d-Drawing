@@ -25,12 +25,19 @@ not decoration: each visible face is coloured by the box it belongs to, i.e. by 
 smallest $f_3$ among those dominating that part of the plane. They are *not* the individual
 hypervolume contributions, which are L-shaped and in general smaller.
 
-Further conventions: the points $a^{(i)}$ are dark discs, the reference point $r$ is an open square,
-and dashed lines are *hidden* edges in the engineering sense — the three of them that meet at $r$
-run behind the solid, which is what fixes the position of $r$ for the reader. The 3-D figure is
-seen from the origin side, so the staircase faces the reader and the region hangs from $r$. Its axis
-triad sits in the corner rather than through the data, because the origin plays no role in the
-definition of the indicator — only the directions of the objectives matter.
+The 3-D figure also shows the projections of the points and of the dominated region onto the
+$f_1$–$f_2$ and $f_2$–$f_3$ planes, in grey with dashed outlines. They are the same construction one
+dimension lower, and they let the reader check the dominance relations in each pair of objectives
+directly — no point of a projected staircase is dominated by another one.
+
+Further conventions: the points $a^{(i)}$ are dark discs named in the legend, the reference point $r$
+is a red square, and the dashed red lines are the three *hidden* edges that meet at $r$ behind the
+solid, which is what fixes its position for the reader. The 3-D figure is seen from the origin side,
+because for a minimisation problem the dominated region hangs from $r$ and its staircase faces the
+origin; the faces are shaded accordingly, by $|n\cdot v|$ for the viewing direction $v$, so the
+undersides are darkest. The axis triad is drawn inside the same 3-D axes as the boxes, so its arrows
+carry the same projection and are parallel to the box edges by construction; it is placed beside the
+data rather than at the origin, because the origin plays no role in the definition of the indicator.
 
 ## Reproducing the figures
 
