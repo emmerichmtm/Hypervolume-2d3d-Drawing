@@ -279,8 +279,9 @@ def fig_3d():
                       mew=0.8, label=name(q + 1)) for q in range(len(A))]
     handles.append(Line2D([], [], ls="none", marker="s", ms=8, mfc=RED, mec="white",
                           mew=0.8, label=r"$r$"))
-    ax.legend(handles=handles, loc="upper left", frameon=False, labelspacing=0.55,
-              handletextpad=0.3, borderpad=0.2, fontsize=15)
+    ax.legend(handles=handles, loc="center left", bbox_to_anchor=(0.97, 0.53),
+              frameon=False, labelspacing=0.55, handletextpad=0.3, borderpad=0.2,
+              borderaxespad=0.0, fontsize=15)
 
     # axis triad, drawn in the same 3-D axes: same projection matrix as the boxes
     o, arm = np.array([0.02, 1.52, 0.10]), 0.36
