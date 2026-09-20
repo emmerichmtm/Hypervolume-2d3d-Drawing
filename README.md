@@ -28,7 +28,9 @@ hypervolume contributions, which are L-shaped and in general smaller.
 The 3-D figure also shows the projections of the points and of the dominated region onto the
 $f_1$–$f_2$ and $f_2$–$f_3$ planes, in grey with dashed outlines. They are the same construction one
 dimension lower, and they let the reader check the dominance relations in each pair of objectives
-directly — no point of a projected staircase is dominated by another one.
+directly — no point of a projected staircase is dominated by another one. The reference point is
+projected as well, in transparent red: each projected region is bounded by it, and the dashed red
+line joining the two is at the same time the hidden edge of the solid that runs to $r$.
 
 Further conventions: the points $a^{(i)}$ are dark discs named in the legend, the reference point $r$
 is a red square, and the dashed red lines are the three *hidden* edges that meet at $r$ behind the

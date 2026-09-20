@@ -236,8 +236,8 @@ def fig_3d():
 
     # the three edges of the solid that meet at r run behind it: dashed, as hidden edges
     hidden = [[(r[0], ys[0], r[2]), (r[0], r[1], r[2])],
-              [(xs[0], r[1], r[2]), (r[0], r[1], r[2])],
-              [(r[0], r[1], Z[nx - 1, ny - 1]), (r[0], r[1], r[2])]]
+              [(0.0, r[1], r[2]), (r[0], r[1], r[2])],        # continues into the f2-f3 plane
+              [(r[0], r[1], 0.0), (r[0], r[1], r[2])]]        # continues into the f1-f2 plane
 
     fig = plt.figure(figsize=(7.6, 5.9))
     ax = fig.add_subplot(111, projection="3d", computed_zorder=False)
@@ -263,11 +263,14 @@ def fig_3d():
                     zorder=0.6)
             ax.plot([a[0], f[0]], [a[1], f[1]], [a[2], f[2]], ls=(0, (4, 3)), lw=0.9,
                     color=DROP, zorder=3.6)   # in front: the planes are nearer than the solid
+        rp = lift(r2[0], r2[1])
+        ax.plot([rp[0]], [rp[1]], [rp[2]], "s", ms=6.5, mfc=RED, mec="none", alpha=0.55,
+                zorder=0.6)
 
     ax.add_collection3d(Poly3DCollection(polys, facecolors=cols, edgecolors=cols,
                                          linewidths=0.4, zorder=1))
     ax.add_collection3d(Line3DCollection(segs, colors=INK, linewidths=1.0, zorder=2))
-    ax.add_collection3d(Line3DCollection(hidden, colors=shade(RED, 1.55), linewidths=1.0,
+    ax.add_collection3d(Line3DCollection(hidden, colors=RED, linewidths=1.0, alpha=0.45,
                                          zorder=3, linestyles=(0, (4, 4))))
     for q, a in enumerate(A):
         ax.plot([a[0]], [a[1]], [a[2]], "o", ms=9, mfc=dark[q], mec="white", mew=1.0,
