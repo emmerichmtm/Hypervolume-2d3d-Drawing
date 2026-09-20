@@ -6,9 +6,18 @@ a reference point r with a_i <= r_i, the boxes [a, r] and
     HV(A; r) = lambda_m ( union_{a in A} [a, r] ).
 
 Writes hypervolume-indicator-2d.{svg,png} and hypervolume-indicator-3d.{svg,png}.
-Set PAREN = True for the parenthesised labels a^(i) used in the text of the article.
+Set PAREN = False for the plain labels a^i instead of a^(i).
+
+Note on the 3-D view.  For a minimisation problem the dominated region hangs from the
+reference point, so its staircase-shaped boundary faces the origin and can only be seen
+from a viewpoint below the region (elev < 0).  The faces are therefore shaded the way a
+light at the camera illuminates them (Lambert, headlight): the undersides, which are the
+faces most oblique to the viewer, are darkest, and the walls facing -f2 are brightest.
+The axis triad is drawn *inside* the same 3-D axes, so its arrows are projected with
+exactly the same matrix as the boxes and are parallel to their edges by construction.
 """
 import os
+import re
 
 import matplotlib
 matplotlib.use("Agg")
@@ -16,7 +25,7 @@ import matplotlib.colors as mcolors
 import matplotlib.patheffects as pe
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.patches import FancyArrowPatch, Rectangle
+from matplotlib.patches import FancyArrowPatch
 from mpl_toolkits.mplot3d.art3d import Line3DCollection, Poly3DCollection
 from mpl_toolkits.mplot3d.proj3d import proj_transform
 
@@ -39,12 +48,38 @@ def shade(c, f):
     return tuple(np.clip(rgb * f if f <= 1 else rgb + (1 - rgb) * (f - 1), 0, 1))
 
 
-def save(fig, stem):
-    for ext in ("svg", "png"):
-        fig.savefig(os.path.join(OUT, stem + "." + ext), dpi=250, facecolor="white",
-                    bbox_inches="tight", pad_inches=0.06)
+def save(fig, stem, margin=0.015):
+    """Write SVG and PNG and trim both to the drawn content.
+
+    A 3-D axes reserves the projection of the whole data cube, whose corners stay empty
+    here, and bbox_inches="tight" keeps that box.  The PNG is therefore trimmed to its
+    non-white pixels and the same relative crop is applied to the viewBox of the SVG."""
+    png, svg = (os.path.join(OUT, stem + e) for e in (".png", ".svg"))
+    fig.savefig(png, dpi=250, facecolor="white", bbox_inches="tight", pad_inches=0.06)
+    fig.savefig(svg, facecolor="white", bbox_inches="tight", pad_inches=0.06)
     plt.close(fig)
-    print("wrote", stem + ".svg/.png")
+
+    from PIL import Image
+    im = Image.open(png).convert("RGB")
+    W, H = im.size
+    ink = np.asarray(im).min(axis=2) < 250
+    rows, colsx = np.where(ink)
+    if len(rows) == 0:
+        return
+    pad = int(margin * max(W, H))
+    x0, x1 = max(0, colsx.min() - pad), min(W, colsx.max() + 1 + pad)
+    y0, y1 = max(0, rows.min() - pad), min(H, rows.max() + 1 + pad)
+    im.crop((x0, y0, x1, y1)).save(png)
+
+    text = open(svg, encoding="utf-8").read()
+    m = re.search(r'viewBox="0 0 ([0-9.]+) ([0-9.]+)"', text)
+    vw, vh = float(m.group(1)), float(m.group(2))
+    box = (vw * x0 / W, vh * y0 / H, vw * (x1 - x0) / W, vh * (y1 - y0) / H)
+    text = text.replace(m.group(0), 'viewBox="%.3f %.3f %.3f %.3f"' % box)
+    text = re.sub(r'width="[0-9.]+pt"', 'width="%.3fpt"' % box[2], text, count=1)
+    text = re.sub(r'height="[0-9.]+pt"', 'height="%.3fpt"' % box[3], text, count=1)
+    open(svg, "w", encoding="utf-8").write(text)
+    print("wrote", stem + ".svg/.png", "%dx%d px" % (x1 - x0, y1 - y0))
 
 
 # ----------------------------------------------------------------------- 2-D
@@ -106,6 +141,9 @@ def fig_3d():
                   [0.30, 0.86, 0.45]])
     r = np.array([1.0, 1.0, 1.0])
     elev, azim = -20.0, -128.0
+    EPS = 1e-12
+    # the union of the boxes is a height field over the grid of the point coordinates:
+    # over cell (i, j) it reaches from the floor Z[i,j] up to r_3
     xs = np.append(np.sort(A[:, 0]), r[0])
     ys = np.append(np.sort(A[:, 1]), r[1])
     nx, ny = len(xs) - 1, len(ys) - 1
@@ -114,8 +152,26 @@ def fig_3d():
     for i in range(nx):
         for j in range(ny):
             for q, a in enumerate(A):
-                if a[0] <= xs[i] + 1e-12 and a[1] <= ys[j] + 1e-12 and a[2] < Z[i, j]:
+                if a[0] <= xs[i] + EPS and a[1] <= ys[j] + EPS and a[2] < Z[i, j]:
                     Z[i, j], own[i, j] = a[2], q
+
+    def wall_x(i, j):
+        """z-interval of the wall of cell (i,j) in the plane x = xs[i] (it faces -f1)."""
+        if not (0 <= i < nx and 0 <= j < ny) or own[i, j] < 0:
+            return None
+        top = r[2] if i == 0 else min(Z[i - 1, j], r[2])
+        return (Z[i, j], top) if Z[i, j] < top - EPS else None
+
+    def wall_y(i, j):
+        """z-interval of the wall of cell (i,j) in the plane y = ys[j] (it faces -f2)."""
+        if not (0 <= i < nx and 0 <= j < ny) or own[i, j] < 0:
+            return None
+        top = r[2] if j == 0 else min(Z[i, j - 1], r[2])
+        return (Z[i, j], top) if Z[i, j] < top - EPS else None
+
+    # Lambert shading for a light at the camera: brightness ~ |n . view|, so the
+    # undersides (n = -e3) are darkest and the walls facing -f2 are brightest
+    SH_FLOOR, SH_WALL_X, SH_WALL_Y = 0.92, 1.16, 1.40
 
     polys, cols, segs = [], [], []
     for i in range(nx):
@@ -125,79 +181,84 @@ def fig_3d():
                 continue
             c = PALETTE[q]
             x0, x1, y0, y1, z = xs[i], xs[i + 1], ys[j], ys[j + 1], Z[i, j]
-            polys.append([(x0, y0, z), (x1, y0, z), (x1, y1, z), (x0, y1, z)])   # floor
-            cols.append(shade(c, 1.45))
-            zp = r[2] if i == 0 else min(Z[i - 1, j], r[2])                      # wall facing -f1
-            if z < zp - 1e-12:
-                polys.append([(x0, y0, z), (x0, y1, z), (x0, y1, zp), (x0, y0, zp)])
-                cols.append(shade(c, 1.08))
-                segs += [[(x0, y0, z), (x0, y1, z)], [(x0, y0, zp), (x0, y1, zp)],
-                         [(x0, y0, z), (x0, y0, zp)], [(x0, y1, z), (x0, y1, zp)]]
-            zp = r[2] if j == 0 else min(Z[i, j - 1], r[2])                      # wall facing -f2
-            if z < zp - 1e-12:
-                polys.append([(x0, y0, z), (x1, y0, z), (x1, y0, zp), (x0, y0, zp)])
-                cols.append(shade(c, 0.80))
-                segs += [[(x0, y0, z), (x1, y0, z)], [(x0, y0, zp), (x1, y0, zp)],
-                         [(x0, y0, z), (x0, y0, zp)], [(x1, y0, z), (x1, y0, zp)]]
-            if i == nx - 1:
+            polys.append([(x0, y0, z), (x1, y0, z), (x1, y1, z), (x0, y1, z)])
+            cols.append(shade(c, SH_FLOOR))
+            iv = wall_x(i, j)
+            if iv:
+                polys.append([(x0, y0, iv[0]), (x0, y1, iv[0]), (x0, y1, iv[1]), (x0, y0, iv[1])])
+                cols.append(shade(c, SH_WALL_X))
+                segs += [[(x0, y0, iv[0]), (x0, y1, iv[0])], [(x0, y0, iv[1]), (x0, y1, iv[1])]]
+            iv = wall_y(i, j)
+            if iv:
+                polys.append([(x0, y0, iv[0]), (x1, y0, iv[0]), (x1, y0, iv[1]), (x0, y0, iv[1])])
+                cols.append(shade(c, SH_WALL_Y))
+                segs += [[(x0, y0, iv[0]), (x1, y0, iv[0])], [(x0, y0, iv[1]), (x1, y0, iv[1])]]
+            if i == nx - 1:                       # silhouette of the floor at f_1 = r_1
                 segs.append([(x1, y0, z), (x1, y1, z)])
-            if j == ny - 1:
+            if j == ny - 1:                       # silhouette of the floor at f_2 = r_2
                 segs.append([(x0, y1, z), (x1, y1, z)])
 
-    def key(s):
-        return tuple(sorted(tuple(round(v, 9) for v in p) for p in s))
+    def crease(a, b):
+        """Where two coplanar neighbouring walls do not cover the same z-interval, and
+        only there, the shared vertical line is a real edge of the solid."""
+        if a is None or b is None:
+            return [x for x in (a, b) if x is not None]
+        out = [(min(a[0], b[0]), max(a[0], b[0])), (min(a[1], b[1]), max(a[1], b[1]))]
+        return [(lo, hi) for lo, hi in out if hi - lo > EPS]
 
-    keys = [key(s) for s in segs]
-    once = [s for s, k in zip(segs, keys) if keys.count(k) == 1]   # drop internal grid seams
-    # the two edges of the ceiling z = r_3 that meet at r are hidden behind the solid: dashed
+    for i in range(nx):                            # vertical edges of the walls x = xs[i]
+        for b in range(ny + 1):
+            for lo, hi in crease(wall_x(i, b - 1), wall_x(i, b)):
+                segs.append([(xs[i], ys[b], lo), (xs[i], ys[b], hi)])
+    for j in range(ny):                            # vertical edges of the walls y = ys[j]
+        for b in range(nx + 1):
+            for lo, hi in crease(wall_y(b - 1, j), wall_y(b, j)):
+                segs.append([(xs[b], ys[j], lo), (xs[b], ys[j], hi)])
+
+    # the three edges of the solid that meet at r run behind it: dashed, as hidden edges
     hidden = [[(r[0], ys[0], r[2]), (r[0], r[1], r[2])],
               [(xs[0], r[1], r[2]), (r[0], r[1], r[2])],
               [(r[0], r[1], Z[nx - 1, ny - 1]), (r[0], r[1], r[2])]]
 
-    fig = plt.figure(figsize=(6.8, 6.0))
+    fig = plt.figure(figsize=(7.6, 5.9))
     ax = fig.add_subplot(111, projection="3d", computed_zorder=False)
     ax.set_proj_type("ortho")
     ax.add_collection3d(Poly3DCollection(polys, facecolors=cols, edgecolors=cols,
                                          linewidths=0.4, zorder=1))
-    ax.add_collection3d(Line3DCollection(once, colors=INK, linewidths=1.0, zorder=2))
+    ax.add_collection3d(Line3DCollection(segs, colors=INK, linewidths=1.0, zorder=2))
     ax.add_collection3d(Line3DCollection(hidden, colors=GREY, linewidths=0.9, zorder=3,
                                          linestyles=(0, (4, 4))))
     for q, a in enumerate(A):
-        ax.plot([a[0]], [a[1]], [a[2]], "o", ms=8.5, mfc=INK, mec="white", mew=1.0,
-                zorder=4)
-    # label offsets, chosen so that every label sits on the face its point owns
+        ax.plot([a[0]], [a[1]], [a[2]], "o", ms=8.5, mfc=INK, mec="white", mew=1.0, zorder=4)
     offs = [(0.05, 0.26, -0.02, "center"), (0.00, -0.03, -0.09, "top"),
-            (0.03, 0.00, -0.09, "top"), (-0.02, 0.00, -0.09, "top")]
+            (0.02, 0.10, -0.09, "top"), (-0.02, 0.00, -0.09, "top")]
+    plate = dict(facecolor="white", edgecolor="none", alpha=0.85, pad=1.2)
     for q, (a, (dx, dy, dz, va)) in enumerate(zip(A, offs)):
         ax.text(a[0] + dx, a[1] + dy, a[2] + dz, name(q + 1), ha="center", va=va,
-                color=INK, zorder=5)
-    # the reference point is the far corner of the solid (the dashed edges meet there)
+                color=INK, zorder=5, bbox=plate)
     ax.plot([r[0]], [r[1]], [r[2]], "s", ms=8.5, mfc="white", mec=INK, mew=1.5, zorder=4)
     ax.text(r[0] + 0.02, r[1] - 0.06, r[2] + 0.05, r"$r$", ha="left", va="bottom", color=INK,
-            zorder=5, path_effects=[pe.withStroke(linewidth=2.5, foreground="white")])
-    ax.text2D(0.03, 0.95, r"$\mathrm{HV}(A;r)$", transform=ax.transAxes, color=INK, zorder=5)
+            zorder=5, bbox=plate)
+    ax.text(0.35, 0.35, 1.20, r"$\mathrm{HV}(A;r)$", ha="center", va="center", color=INK,
+            zorder=5)
 
-    ax.set_xlim(0.10, 1.05)
-    ax.set_ylim(0.10, 1.05)
-    ax.set_zlim(0.10, 1.05)
-    ax.set_box_aspect((1, 1, 1))
+    # axis triad, drawn in the same 3-D axes: same projection matrix as the boxes
+    o, arm = np.array([0.02, 1.52, 0.10]), 0.36
+    for k, lab in enumerate([r"$f_1$", r"$f_2$", r"$f_3$"]):
+        e = np.zeros(3)
+        e[k] = 1.0
+        t = o + arm * e
+        ax.add_artist(Arrow3D([o[0], t[0]], [o[1], t[1]], [o[2], t[2]], arrowstyle="-|>",
+                              mutation_scale=13, lw=1.5, color=INK, zorder=6))
+        p = o + 1.30 * arm * e
+        ax.text(p[0], p[1], p[2], lab, ha="center", va="center", color=INK, zorder=6)
+
+    ax.set_xlim(0.00, 1.10)
+    ax.set_ylim(0.00, 1.95)
+    ax.set_zlim(0.00, 1.32)
+    ax.set_box_aspect((1.10, 1.95, 1.32))          # isotropic: box aspect = data ranges
     ax.view_init(elev=elev, azim=azim)
     ax.set_axis_off()
-
-    # orientation triad (the origin itself plays no role in the definition of HV)
-    gx = fig.add_axes([0.05, 0.035, 0.22, 0.22], projection="3d")
-    gx.set_proj_type("ortho")
-    for v, lab in [((1, 0, 0), r"$f_1$"), ((0, 1, 0), r"$f_2$"), ((0, 0, 1), r"$f_3$")]:
-        gx.add_artist(Arrow3D([0, v[0]], [0, v[1]], [0, v[2]], arrowstyle="-|>",
-                              mutation_scale=12, lw=1.4, color=INK))
-        gx.text(v[0] * 1.30, v[1] * 1.30, v[2] * 1.28, lab, ha="center", va="center", color=INK)
-    gx.set_xlim(-0.15, 1.15)
-    gx.set_ylim(-0.15, 1.15)
-    gx.set_zlim(-0.15, 1.15)
-    gx.set_box_aspect((1, 1, 1))
-    gx.view_init(elev=elev, azim=azim)
-    gx.set_axis_off()
-    gx.patch.set_alpha(0.0)
     save(fig, "hypervolume-indicator-3d")
 
 
