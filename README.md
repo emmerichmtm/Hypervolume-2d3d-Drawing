@@ -11,7 +11,7 @@ One small Python script produces both figures as SVG (for upload) and PNG (for c
 ## What the figures show
 
 For a minimisation problem with $m$ objectives, a finite approximation set
-$A = \{a^{1}, \dots, a^{n}\} \subset \mathbb{R}^m$ and a reference point $r$ with $a_i \le r_i$,
+$A = \{a^{(1)}, \dots, a^{(n)}\} \subset \mathbb{R}^m$ and a reference point $r$ with $a_i \le r_i$,
 each point spans the axis-aligned box $[a, r] = [a_1, r_1] \times \dots \times [a_m, r_m]$, and
 
 $$\mathrm{HV}(A;r) \;=\; \lambda_m\Big(\bigcup_{a \in A} [a, r]\Big),$$
@@ -19,15 +19,15 @@ $$\mathrm{HV}(A;r) \;=\; \lambda_m\Big(\bigcup_{a \in A} [a, r]\Big),$$
 with $\lambda_m$ the $m$-dimensional Lebesgue measure: an area for $m = 2$, a volume for $m = 3$.
 The shaded region in each figure is that union, and only non-dominated points contribute to it.
 
-The colours are not decoration. They show the standard sweep decomposition of the union:
+The 2-D region is filled in a single colour, because every part of it is dominated in the same
+sense and the staircase already shows which point bounds it where. In the 3-D figure the colours are
+not decoration: each visible face is coloured by the box it belongs to, i.e. by the point with the
+smallest $f_3$ among those dominating that part of the plane. They are *not* the individual
+hypervolume contributions, which are L-shaped and in general smaller.
 
-* **2-D** — the region is cut into the vertical slab that each point contributes when the points are
-  swept in order of $f_1$. Summing the slab areas is the $O(n \log n)$ algorithm for the 2-D case.
-* **3-D** — the visible staircase surface is cut into cells, each coloured by the point that
-  determines its floor, i.e. the smallest $f_3$ among the points dominating that cell.
-
-Further conventions: the points $a^{i}$ are dark discs, the reference point $r$ is an open square,
-and dashed lines are *hidden* edges that run behind the solid and meet at $r$. The 3-D figure is
+Further conventions: the points $a^{(i)}$ are dark discs, the reference point $r$ is an open square,
+and dashed lines are *hidden* edges in the engineering sense — the three of them that meet at $r$
+run behind the solid, which is what fixes the position of $r$ for the reader. The 3-D figure is
 seen from the origin side, so the staircase faces the reader and the region hangs from $r$. Its axis
 triad sits in the corner rather than through the data, because the origin plays no role in the
 definition of the indicator — only the directions of the objectives matter.
@@ -48,8 +48,8 @@ the output is deterministic.
 Everything worth changing sits at the top of `plot_hypervolume_figures.py` or in the two figure
 functions:
 
-* `PAREN = True` switches the labels from $a^{i}$ to the parenthesised form $a^{(i)}$ used in the
-  body of the Wikipedia article.
+* `PAREN = False` switches the labels from the parenthesised form $a^{(i)}$, which is the one used
+  in the body of the Wikipedia article, to the plain $a^{i}$.
 * The arrays `A` in `fig_2d()` and `fig_3d()` hold the objective vectors, `r` the reference point.
   Any mutually non-dominated points work; the 3-D routine recomputes the staircase from scratch.
 * `PALETTE`, `INK` and `GREY` set the colours, `elev, azim` in `fig_3d()` the camera.

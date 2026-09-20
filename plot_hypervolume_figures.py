@@ -13,6 +13,7 @@ import os
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.colors as mcolors
+import matplotlib.patheffects as pe
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import FancyArrowPatch, Rectangle
@@ -23,7 +24,7 @@ OUT = os.path.dirname(os.path.abspath(__file__))
 PALETTE = ["#4C78A8", "#F58518", "#54A24B", "#B279A2", "#E45756"]
 INK = "#1b1f23"
 GREY = "#7b8794"
-PAREN = False
+PAREN = True
 
 plt.rcParams.update({"mathtext.fontset": "cm", "font.family": "DejaVu Sans",
                      "font.size": 15, "svg.fonttype": "path"})
@@ -54,23 +55,23 @@ def fig_2d():
     xs = np.append(A[:, 0], r[0])
 
     fig, ax = plt.subplots(figsize=(6.6, 6.4))
-    # the dominated region, cut into the slab that each point contributes to the sweep
-    for i, a in enumerate(A):
-        ax.add_patch(Rectangle((a[0], a[1]), xs[i + 1] - a[0], r[1] - a[1],
-                               facecolor=shade(PALETTE[i], 1.58), edgecolor="white",
-                               linewidth=1.2, zorder=1))
-    # staircase boundary of the dominated region
+    # staircase boundary of the dominated region, and the region itself as one polygon
     px, py = [A[0, 0]], [r[1]]
     for i, a in enumerate(A):
         px += [a[0], xs[i + 1]]
         py += [a[1], a[1]]
+    ax.fill(px + [r[0]], py + [r[1]], facecolor=shade(PALETTE[0], 1.62), edgecolor="none",
+            zorder=1)
     ax.plot(px, py, color=INK, lw=2.0, solid_joinstyle="miter", zorder=3)
     ax.plot([r[0], r[0], A[0, 0]], [A[-1, 1], r[1], r[1]], color=GREY, lw=1.2,
             ls=(0, (5, 4)), zorder=3)
     # points and reference point
     for i, a in enumerate(A):
         ax.plot(a[0], a[1], "o", ms=8.5, mfc=INK, mec="white", mew=1.0, zorder=4)
-        ax.text(a[0] - 0.035, a[1] - 0.04, name(i + 1), ha="right", va="top", color=INK)
+        if i == 0:      # straight below, so that the label keeps clear of the f_2 axis
+            ax.text(a[0], a[1] - 0.05, name(i + 1), ha="center", va="top", color=INK)
+        else:
+            ax.text(a[0] - 0.035, a[1] - 0.04, name(i + 1), ha="right", va="top", color=INK)
     ax.plot(r[0], r[1], "s", ms=8.5, mfc="white", mec=INK, mew=1.5, zorder=4)
     ax.text(r[0] + 0.035, r[1] + 0.015, r"$r$", ha="left", va="bottom", color=INK)
     ax.text(0.73, 0.83, r"$\mathrm{HV}(A;r)$", ha="center", va="center", color=INK, zorder=4)
@@ -150,7 +151,8 @@ def fig_3d():
     once = [s for s, k in zip(segs, keys) if keys.count(k) == 1]   # drop internal grid seams
     # the two edges of the ceiling z = r_3 that meet at r are hidden behind the solid: dashed
     hidden = [[(r[0], ys[0], r[2]), (r[0], r[1], r[2])],
-              [(xs[0], r[1], r[2]), (r[0], r[1], r[2])]]
+              [(xs[0], r[1], r[2]), (r[0], r[1], r[2])],
+              [(r[0], r[1], Z[nx - 1, ny - 1]), (r[0], r[1], r[2])]]
 
     fig = plt.figure(figsize=(6.8, 6.0))
     ax = fig.add_subplot(111, projection="3d", computed_zorder=False)
@@ -163,15 +165,16 @@ def fig_3d():
     for q, a in enumerate(A):
         ax.plot([a[0]], [a[1]], [a[2]], "o", ms=8.5, mfc=INK, mec="white", mew=1.0,
                 zorder=4)
-    for q, (a, dx, dy, dz) in enumerate(zip(A, [-0.02, 0.0, 0.03, -0.02],
-                                            [-0.02, -0.03, 0.0, 0.0],
-                                            [-0.09, -0.09, -0.09, -0.09])):
-        ax.text(a[0] + dx, a[1] + dy, a[2] + dz, name(q + 1), ha="center", va="top",
+    # label offsets, chosen so that every label sits on the face its point owns
+    offs = [(0.05, 0.26, -0.02, "center"), (0.00, -0.03, -0.09, "top"),
+            (0.03, 0.00, -0.09, "top"), (-0.02, 0.00, -0.09, "top")]
+    for q, (a, (dx, dy, dz, va)) in enumerate(zip(A, offs)):
+        ax.text(a[0] + dx, a[1] + dy, a[2] + dz, name(q + 1), ha="center", va=va,
                 color=INK, zorder=5)
     # the reference point is the far corner of the solid (the dashed edges meet there)
     ax.plot([r[0]], [r[1]], [r[2]], "s", ms=8.5, mfc="white", mec=INK, mew=1.5, zorder=4)
-    ax.text(r[0] + 0.015, r[1] - 0.05, r[2] + 0.055, r"$r$", ha="left", va="bottom", color=INK,
-            zorder=5, bbox=dict(facecolor="white", edgecolor="none", alpha=0.92, pad=1.2))
+    ax.text(r[0] + 0.02, r[1] - 0.06, r[2] + 0.05, r"$r$", ha="left", va="bottom", color=INK,
+            zorder=5, path_effects=[pe.withStroke(linewidth=2.5, foreground="white")])
     ax.text2D(0.03, 0.95, r"$\mathrm{HV}(A;r)$", transform=ax.transAxes, color=INK, zorder=5)
 
     ax.set_xlim(0.10, 1.05)
