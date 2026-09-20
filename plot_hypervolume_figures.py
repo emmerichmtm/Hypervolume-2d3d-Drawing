@@ -17,7 +17,6 @@ The axis triad is drawn *inside* the same 3-D axes, so its arrows are projected 
 exactly the same matrix as the boxes and are parallel to their edges by construction.
 """
 import os
-import re
 
 import matplotlib
 matplotlib.use("Agg")
@@ -27,6 +26,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch
+from matplotlib.transforms import Bbox
 from mpl_toolkits.mplot3d.art3d import Line3DCollection, Poly3DCollection
 from mpl_toolkits.mplot3d.proj3d import proj_transform
 
@@ -52,37 +52,33 @@ def shade(c, f):
 
 
 def save(fig, stem, margin=0.015):
-    """Write SVG and PNG and trim both to the drawn content.
+    """Write SVG and PNG cropped to the drawn content.
 
     A 3-D axes reserves the projection of the whole data cube, whose corners stay empty
-    here, and bbox_inches="tight" keeps that box.  The PNG is therefore trimmed to its
-    non-white pixels and the same relative crop is applied to the viewBox of the SVG."""
-    png, svg = (os.path.join(OUT, stem + e) for e in (".png", ".svg"))
-    fig.savefig(png, dpi=250, facecolor="white", bbox_inches="tight", pad_inches=0.06)
-    fig.savefig(svg, facecolor="white", bbox_inches="tight", pad_inches=0.06)
-    plt.close(fig)
-
+    here, so bbox_inches="tight" leaves a wide margin.  The content is located once on a
+    trial raster and both files are then written with an explicit bounding box.  Cropping
+    this way rather than by rewriting the viewBox keeps the SVG root element plain -
+    viewBox="0 0 w h" with width and height to match - which is what strict renderers and
+    the Wikimedia thumbnailer expect."""
     from PIL import Image
+    png, svg = (os.path.join(OUT, stem + e) for e in (".png", ".svg"))
+    fig.canvas.draw()
+    box = fig.get_tightbbox(fig.canvas.get_renderer()).padded(0.06)
+    fig.savefig(png, dpi=120, facecolor="white", bbox_inches=box)
+
     im = Image.open(png).convert("RGB")
     W, H = im.size
-    ink = np.asarray(im).min(axis=2) < 250
-    rows, colsx = np.where(ink)
-    if len(rows) == 0:
-        return
-    pad = int(margin * max(W, H))
-    x0, x1 = max(0, colsx.min() - pad), min(W, colsx.max() + 1 + pad)
-    y0, y1 = max(0, rows.min() - pad), min(H, rows.max() + 1 + pad)
-    im.crop((x0, y0, x1, y1)).save(png)
-
-    text = open(svg, encoding="utf-8").read()
-    m = re.search(r'viewBox="0 0 ([0-9.]+) ([0-9.]+)"', text)
-    vw, vh = float(m.group(1)), float(m.group(2))
-    box = (vw * x0 / W, vh * y0 / H, vw * (x1 - x0) / W, vh * (y1 - y0) / H)
-    text = text.replace(m.group(0), 'viewBox="%.3f %.3f %.3f %.3f"' % box)
-    text = re.sub(r'width="[0-9.]+pt"', 'width="%.3fpt"' % box[2], text, count=1)
-    text = re.sub(r'height="[0-9.]+pt"', 'height="%.3fpt"' % box[3], text, count=1)
-    open(svg, "w", encoding="utf-8").write(text)
-    print("wrote", stem + ".svg/.png", "%dx%d px" % (x1 - x0, y1 - y0))
+    rows, cols_ = np.where(np.asarray(im).min(axis=2) < 250)
+    pad = margin * max(box.width, box.height)
+    crop = Bbox.from_extents(
+        box.x0 + cols_.min() / W * box.width - pad,
+        box.y1 - (rows.max() + 1) / H * box.height - pad,     # the raster counts rows
+        box.x0 + (cols_.max() + 1) / W * box.width + pad,     # from the top
+        box.y1 - rows.min() / H * box.height + pad)
+    fig.savefig(png, dpi=250, facecolor="white", bbox_inches=crop)
+    fig.savefig(svg, facecolor="white", bbox_inches=crop)
+    plt.close(fig)
+    print("wrote %s  %.2f x %.2f in" % (stem, crop.width, crop.height))
 
 
 # ----------------------------------------------------------------------- 2-D
